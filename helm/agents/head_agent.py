@@ -1,0 +1,290 @@
+"""
+Head Agent - Orchestrates and supervises other agents
+Deterministic task classification and routing
+"""
+
+import logging
+import uuid
+from typing import Dict, Any
+
+from ..schemas import (
+    AgentType, DecisionStatus, StructuredDecision, DecisionInput
+)
+from ..validation.validator import Validator
+from ..arbitration.arbitrator import ArbitrationEngine
+
+
+logger = logging.getLogger(__name__)
+
+
+class HeadAgent:
+    """Orchestration agent that supervises and routes to specialized agents"""
+    
+    def __init__(self, config=None, validator: Validator = None):
+        """Initialize HeadAgent
+        
+        Args:
+            config: Configuration object
+            validator: Validator instance
+        """
+        self.config = config
+        self.validator = validator or Validator(config)
+        # initialize arbitration engine for v3 deterministic arbitration
+        from ..arbitration.arbitrator import ArbitrationEngine
+        self.arbitrator = ArbitrationEngine(config)
+        self.agents = {}  # Will be populated with strategy and finance agents
+        self.max_retries = config.max_retries if config else 2
+        self.decision_history = []
+    
+    def register_agent(self, agent_type: AgentType, agent):
+        """Register a specialized agent
+        
+        Args:
+            agent_type: Type of agent (STRATEGY, FINANCE, etc.)
+            agent: Agent instance
+        """
+        self.agents[agent_type] = agent
+        logger.info(f"Registered agent: {agent_type.value}")
+    
+    def classify_task(self, prompt: str) -> AgentType:
+        """Classify task to appropriate agent using deterministic rules
+        
+        Args:
+            prompt: Input prompt from user
+            
+        Returns:
+            AgentType: Classified agent type
+        """
+        prompt_lower = prompt.lower()
+        
+        # Deterministic keyword-based classification
+        finance_keywords = ['profit', 'revenue', 'cost', 'margin', 'financial', 'roi', 'cashflow', 'debt', 'equity']
+        strategy_keywords = ['strategy', 'plan', 'objective', 'goal', 'vision', 'roadmap', 'decision', 'competitive']
+        
+        finance_score = sum(1 for kw in finance_keywords if kw in prompt_lower)
+        strategy_score = sum(1 for kw in strategy_keywords if kw in prompt_lower)
+        
+        if finance_score > strategy_score:
+            agent_type = AgentType.FINANCE
+        elif strategy_score > finance_score:
+            agent_type = AgentType.STRATEGY
+        else:
+            # Default to STRATEGY for ambiguous cases
+            agent_type = AgentType.STRATEGY
+        
+        logger.info(f"Task classified as: {agent_type.value} (finance_score={finance_score}, strategy_score={strategy_score})")
+        return agent_type
+    
+    def process(self, decision_input: DecisionInput) -> StructuredDecision:
+        """Process input and orchestrate agent responses
+        
+        Args:
+            decision_input: Input decision request
+            
+        Returns:
+            StructuredDecision: Final structured decision
+        """
+        decision_id = str(uuid.uuid4())[:8]
+        logger.info(f"Processing decision {decision_id}: {decision_input.prompt[:50]}...")
+        
+        # Step 1: Validate input (pre-arbitration)
+        input_validation = self.validator.validate_decision(
+            decision_input.context,
+            decision_input.required_fields,
+            self.max_retries
+        )
+        logger.info(f"Input validation result: {input_validation.status.value} (score: {input_validation.score.weighted_score:.2f})")
+        if not input_validation.passed(self.config.validation_threshold if self.config else 0.70):
+            logger.warning(f"Validation failed for decision {decision_id}")
+            return StructuredDecision(
+                decision_id=decision_id,
+                agent_used=AgentType.HEAD,
+                decision_text="Validation failed. Input does not meet requirements.",
+                confidence=0.0,
+                risk_level="high",
+                roi_estimate=0.0,
+                reasoning={'validation': input_validation.to_dict()},
+                validation_score=input_validation.score.weighted_score,
+                status=DecisionStatus.REJECTED
+            )
+        
+        # Step 2: Run both specialized agents (if available)
+        strat_dec = None
+        fin_dec = None
+        if AgentType.STRATEGY in self.agents:
+            strat_dec = self.agents[AgentType.STRATEGY].process(decision_input)
+        if AgentType.FINANCE in self.agents:
+            fin_dec = self.agents[AgentType.FINANCE].process(decision_input)
+
+        # Step 3: Arbitration
+        arb_output = self.arbitrator.compute(
+            strat_dec or self._default_decision(decision_id, AgentType.STRATEGY, decision_input),
+            fin_dec or self._default_decision(decision_id, AgentType.FINANCE, decision_input)
+        )
+        # add arbitration score to context for validation
+        decision_input.context['arbitration_score'] = arb_output['composite_score']
+
+        # re-run validation with arbitration score included
+        validation_result = self.validator.validate_decision(
+            decision_input.context,
+            decision_input.required_fields,
+            self.max_retries
+        )
+        logger.info(f"Post-arbitration validation result: {validation_result.status.value} (score: {validation_result.score.weighted_score:.2f})")
+
+        # pick dominant decision for output
+        if arb_output['dominant_factor'] == 'finance':
+            decision = fin_dec if fin_dec else strat_dec
+        else:
+            decision = strat_dec if strat_dec else fin_dec
+        if decision is None:
+            decision = self._default_decision(decision_id, AgentType.HEAD, decision_input)
+
+        # attach arbitration results
+        if isinstance(decision.reasoning, dict):
+            decision.reasoning['arbitration'] = arb_output
+
+        # Ensure the decision carries the validator's authoritative score
+        try:
+            decision.validation_score = validation_result.score.weighted_score
+            if isinstance(decision.reasoning, dict):
+                decision.reasoning['validation'] = validation_result.to_dict()
+        except Exception:
+            # best-effort assignment; do not fail processing for instrumentation
+            logger.debug("Failed to attach validator score to decision object")
+
+        # Step 4: Validate decision output
+        output_valid, output_msg = self.validator.validate_output(decision.to_dict())
+        
+        if not output_valid:
+            logger.error(f"Output validation failed: {output_msg}")
+            decision.status = DecisionStatus.REJECTED
+        else:
+            decision.status = DecisionStatus.ACCEPTED
+        
+        # Step 5: Store in history
+        self.decision_history.append(decision)
+        logger.info(f"Decision {decision_id} processed with status: {decision.status.value}")
+        
+        return decision
+    
+    def _route_to_agent(
+        self,
+        decision_id: str,
+        agent_type: AgentType,
+        decision_input: DecisionInput,
+        validation_result: Any
+    ) -> StructuredDecision:
+        """Route decision to appropriate specialized agent
+        
+        Args:
+            decision_id: Decision ID
+            agent_type: Target agent type
+            decision_input: Decision input
+            validation_result: Validation result
+            
+        Returns:
+            StructuredDecision: Agent's decision
+        """
+        try:
+            # Get the agent
+            agent = self.agents.get(agent_type)
+            
+            if not agent:
+                logger.warning(f"Agent {agent_type.value} not registered, using HEAD logic")
+                return self._default_decision(decision_id, agent_type, decision_input)
+            
+            # Let agent process the decision
+            decision = agent.process(decision_input)
+            
+            logger.info(f"Agent {agent_type.value} processed decision {decision_id}")
+            return decision
+        
+        except Exception as e:
+            logger.error(f"Agent processing failed: {e}")
+            return self._escalate_decision(decision_id, agent_type, str(e))
+    
+    def _default_decision(
+        self,
+        decision_id: str,
+        agent_type: AgentType,
+        decision_input: DecisionInput
+    ) -> StructuredDecision:
+        """Generate default decision when agent is unavailable
+        
+        Args:
+            decision_id: Decision ID
+            agent_type: Agent type
+            decision_input: Decision input
+            
+        Returns:
+            StructuredDecision: Default decision
+        """
+        return StructuredDecision(
+            decision_id=decision_id,
+            agent_used=agent_type,
+            decision_text="Default decision: Further analysis required.",
+            confidence=0.5,
+            risk_level="medium",
+            roi_estimate=0.0,
+            reasoning={'note': 'Default decision due to unavailable agent'},
+            validation_score=0.5,
+            status=DecisionStatus.PENDING
+        )
+    
+    def _escalate_decision(
+        self,
+        decision_id: str,
+        agent_type: AgentType,
+        error: str
+    ) -> StructuredDecision:
+        """Escalate decision on error
+        
+        Args:
+            decision_id: Decision ID
+            agent_type: Agent type
+            error: Error message
+            
+        Returns:
+            StructuredDecision: Escalated decision
+        """
+        logger.error(f"Escalating decision {decision_id}: {error}")
+        return StructuredDecision(
+            decision_id=decision_id,
+            agent_used=AgentType.ESCALATION,
+            decision_text=f"Decision escalated due to error: {error[:100]}",
+            confidence=0.0,
+            risk_level="high",
+            roi_estimate=0.0,
+            reasoning={'error': error, 'escalated_from': agent_type.value},
+            validation_score=0.0,
+            status=DecisionStatus.ESCALATED
+        )
+    
+    def validate_result(self, result: Dict[str, Any]) -> bool:
+        """Validate agent outputs
+        
+        Args:
+            result: Agent result to validate
+            
+        Returns:
+            bool: True if valid
+        """
+        required_fields = ['decision_text', 'confidence', 'reasoning']
+        
+        for field in required_fields:
+            if field not in result:
+                logger.error(f"Missing required field in result: {field}")
+                return False
+        
+        try:
+            confidence = float(result.get('confidence', 0))
+            if not (0 <= confidence <= 1):
+                logger.error(f"Invalid confidence: {confidence}")
+                return False
+        except (ValueError, TypeError):
+            logger.error("Confidence not numeric")
+            return False
+        
+        logger.debug("Result validation passed")
+        return True
