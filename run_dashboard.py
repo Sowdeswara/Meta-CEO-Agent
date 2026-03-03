@@ -1,27 +1,20 @@
-"""Launcher for HELM interactive dashboard (Phase 4B)
+"""Deprecated launcher for HELM dashboard.
 
-Usage:
-    python run_dashboard.py
+The old interactive dashboard has been removed. To run the application use
+Uvicorn directly:
 
-This will start Streamlit if installed, otherwise it will run in DEMO_MODE and
-exit gracefully.
+    uvicorn app:app --reload
+
+This script remains only to inform users of the new entrypoint.
 """
 
-from helm.config import Config
-from helm.ui.dashboard import Dashboard
+import sys
 
 
 def main():
-    cfg = Config()
-    # ensure demo flag does not prevent full Streamlit if available
-    cfg.DEVELOPMENT_MODE = True
-    # By default, run with whatever weights are in env/config
-    dash = Dashboard(config=cfg)
-    success = dash.start()
-    if not success:
-        print("Dashboard failed to start (Streamlit missing?).")
-    else:
-        print("Dashboard started. Connect via browser to http://{}:{}".format(cfg.dashboard_host, cfg.dashboard_port))
+    print("The HELM dashboard has been deprecated.")
+    print("Please start the server using:\n    uvicorn app:app --reload")
+    sys.exit(1)
 
 
 if __name__ == '__main__':

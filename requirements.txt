@@ -1,0 +1,5 @@
+fastapi
+uvicorn
+pydantic
+# Optional: pandas if you plan to use dataframes server-side
+# pandas

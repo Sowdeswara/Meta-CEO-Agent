@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HELM v3 — Hierarchical Executive Meta-Agent</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="header-content">
+        <h1 class="logo">⚙️ HELM </h1>
+        <p class="subtitle">Deterministic Executive Decision Authority</p>
+        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark/light theme">🌙</button>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="input-section">
+        <div class="input-card">
+          <h2>Decision Request</h2>
+          <form id="decision-form">
+            <div class="form-group">
+              <label for="prompt">Prompt</label>
+              <textarea id="prompt" rows="3" required placeholder="Describe your decision scenario...">Should we pursue the new expansion strategy?</textarea>
+            </div>
+
+            <!-- structured financial inputs using grid -->
+            <div class="form-group grid-context">
+              <div class="grid-item">
+                <label for="revenue">Revenue</label>
+                <input id="revenue" type="number" min="0" step="0.01" placeholder="e.g. 100000" required />
+              </div>
+              <div class="grid-item">
+                <label for="costs">Costs</label>
+                <input id="costs" type="number" min="0" step="0.01" placeholder="e.g. 60000" required />
+              </div>
+              <div class="grid-item">
+                <label for="investment">Investment</label>
+                <input id="investment" type="number" min="0" step="0.01" placeholder="e.g. 50000" required />
+              </div>
+              <div class="grid-item">
+                <label for="expected_returns">Expected Returns</label>
+                <input id="expected_returns" type="number" min="0" step="0.01" placeholder="e.g. 120000" required />
+              </div>
+              <div class="grid-item">
+                <label for="timeframe_years">Timeframe (years)</label>
+                <input id="timeframe_years" type="number" min="0" step="0.1" placeholder="e.g. 1" required />
+              </div>
+              <div class="grid-item">
+                <label for="objectives">Objectives</label>
+                <input id="objectives" type="text" placeholder="comma-separated" />
+              </div>
+              <div class="grid-item">
+                <label for="constraints">Constraints</label>
+                <input id="constraints" type="text" placeholder="comma-separated" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="required">Required Fields</label>
+              <input id="required" type="text" placeholder="comma-separated field names" value="revenue,costs,investment" />
+            </div>
+
+            <button type="submit" class="btn-submit">Run Decision</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Mode Selector -->
+      <div class="mode-selector">
+        <button class="mode-btn active" data-mode="simple">Simple Mode</button>
+        <button class="mode-btn" data-mode="expert">Expert Mode</button>
+      </div>
+
+      <!-- Result Section -->
+      <section id="result-section" class="result-section hidden">
+        <!-- Simple Mode -->
+        <div id="simple-mode" class="mode-content">
+          <div class="decision-card">
+            <div class="decision-header">
+              <h2>Decision Result</h2>
+              <div id="status-badge" class="status-badge">—</div>
+            </div>
+            
+            <div class="decision-content">
+              <p id="decision-text" class="decision-text">—</p>
+              
+              <div class="metrics-grid">
+                <div class="metric-box">
+                  <label>Validation Score</label>
+                  <div class="metric-value" id="metric-val-score">—</div>
+                </div>
+                <div class="metric-box">
+                  <label>Confidence</label>
+                  <div class="metric-value" id="metric-confidence">—</div>
+                </div>
+                <div class="metric-box">
+                  <label>ROI Estimate</label>
+                  <div class="metric-value" id="metric-roi">—</div>
+                </div>
+                <div class="metric-box">
+                  <label>Risk Level</label>
+                  <div class="metric-value" id="metric-risk">—</div>
+                </div>
+              </div>
+
+              <div class="chart-container">
+                <h3>Arbitration Breakdown</h3>
+                <canvas id="arbChart" width="300" height="150"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Expert Mode -->
+        <div id="expert-mode" class="mode-content hidden">
+          <div class="expert-grid">
+            <!-- Agent Breakdown -->
+            <div class="expert-card">
+              <h3>Agent Contribution</h3>
+              <canvas id="agentChart" width="300" height="200"></canvas>
+            </div>
+
+            <!-- Validation Breakdown -->
+            <div class="expert-card">
+              <h3>Validation Metrics</h3>
+              <canvas id="validationChart" width="300" height="200"></canvas>
+            </div>
+
+            <!-- Threshold Sensitivity -->
+            <div class="expert-card">
+              <h3>Risk vs ROI</h3>
+              <canvas id="riskRoiChart" width="300" height="200"></canvas>
+            </div>
+
+            <!-- Arbitration Stacked -->
+            <div class="expert-card">
+              <h3>Arbitration Composition</h3>
+              <div id="arb-details" class="arb-details"></div>
+            </div>
+          </div>
+
+          <!-- Raw JSON -->
+          <div class="raw-section">
+            <h3>Raw Response (Collapsible)</h3>
+            <button id="toggle-raw" class="btn-toggle">Show JSON</button>
+            <pre id="raw-json" class="hidden"></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="error-section" class="error-section hidden">
+        <div class="error-card">
+          <h3>Error Occurred</h3>
+          <p id="error-message"></p>
+          <button class="btn-close" onclick="this.parentElement.parentElement.classList.add('hidden')">Dismiss</button>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>HELM  - Offline Deterministic Decision Authority</p>
+    </footer>
+  </div>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>

@@ -99,3 +99,5 @@ class Config:
             'arbitration_weights': self.ARBITRATION_WEIGHTS,
             'risk_penalty_factor': self.RISK_PENALTY_FACTOR
         }
+DEMO_MODE = True
+USE_LOCAL_MODEL = False

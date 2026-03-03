@@ -15,7 +15,8 @@ from .models.local_model import LocalModel
 from .models.api_model import APIModel
 from .schemas import DecisionInput, ModelConfig, AgentType
 from .storage.database import Database
-from .ui.dashboard import Dashboard
+# The Streamlit-based dashboard has been removed. Import dynamically
+# if dashboard functionality is required to avoid hard dependency.
 
 
 logger = logging.getLogger(__name__)
@@ -125,14 +126,18 @@ class HELM:
         self.head_agent.register_agent(AgentType.FINANCE, self.finance_agent)
         logger.info("[OK] All agents initialized and registered")
         
-        # 8. Initialize dashboard (optional)
+        # 8. Initialize dashboard (optional) - dynamic import to avoid Streamlit
         self.dashboard = None
         if enable_dashboard:
-            self.dashboard = Dashboard(config=self.config)
-            if self.dashboard.start():
-                logger.info(f"[OK] Dashboard ready at {self.config.dashboard_host}:{self.config.dashboard_port}")
-            else:
-                logger.warning("Dashboard disabled (Streamlit not available)")
+            try:
+                from .ui.dashboard import Dashboard  # type: ignore
+                self.dashboard = Dashboard(config=self.config)
+                if self.dashboard.start():
+                    logger.info(f"[OK] Dashboard ready at {self.config.dashboard_host}:{self.config.dashboard_port}")
+                else:
+                    logger.warning("Dashboard disabled (Streamlit not available)")
+            except Exception as e:
+                logger.warning(f"Dashboard component unavailable: {e}")
         
         logger.info("=" * 60)
         logger.info("HELM v2.0 - Initialization Complete")

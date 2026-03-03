@@ -3,7 +3,7 @@ API Model - Call external model APIs with fallback support
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from .interface import ModelInterface
 

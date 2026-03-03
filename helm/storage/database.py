@@ -6,6 +6,7 @@ Stores all decisions and decision history
 import sqlite3
 import logging
 import json
+import threading
 from typing import Any, Dict, List, Optional
 
 from ..schemas import StructuredDecision
@@ -28,6 +29,7 @@ class Database:
         
         self.db_path = db_path
         self.connection = None
+        self._lock = threading.Lock()  # Thread-safety lock
         self._init_db()
     
     def _init_db(self):
@@ -43,7 +45,8 @@ class Database:
     def connect(self) -> bool:
         """Establish database connection"""
         try:
-            self.connection = sqlite3.connect(self.db_path)
+            # check_same_thread=False allows multi-threaded access (required for async frameworks)
+            self.connection = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30.0)
             self.connection.row_factory = sqlite3.Row
             logger.debug("Database connection established")
             return True
@@ -128,30 +131,31 @@ class Database:
             return False
         
         try:
-            cursor = self.connection.cursor()
-            
-            cursor.execute('''
-                INSERT INTO decisions 
-                (id, timestamp, prompt, agent_used, decision_text, confidence, 
-                 risk_level, roi_estimate, validation_score, status, reasoning, currency)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                decision.decision_id,
-                decision.timestamp.isoformat(),
-                '',  # prompt would come from input
-                decision.agent_used.value,
-                decision.decision_text,
-                decision.confidence,
-                decision.risk_level,
-                decision.roi_estimate,
-                decision.validation_score,
-                decision.status.value,
-                json.dumps(decision.reasoning),
-                'USD'
-            ))
-            
-            self.connection.commit()
-            logger.debug(f"Decision {decision.decision_id} stored successfully")
+            with self._lock:  # Thread-safe database access
+                cursor = self.connection.cursor()
+                
+                cursor.execute('''
+                    INSERT INTO decisions 
+                    (id, timestamp, prompt, agent_used, decision_text, confidence, 
+                     risk_level, roi_estimate, validation_score, status, reasoning, currency)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    decision.decision_id,
+                    decision.timestamp.isoformat(),
+                    '',  # prompt would come from input
+                    decision.agent_used.value,
+                    decision.decision_text,
+                    decision.confidence,
+                    decision.risk_level,
+                    decision.roi_estimate,
+                    decision.validation_score,
+                    decision.status.value,
+                    json.dumps(decision.reasoning),
+                    'USD'
+                ))
+                
+                self.connection.commit()
+                logger.debug(f"Decision {decision.decision_id} stored successfully")
             return True
         
         except Exception as e:
@@ -174,10 +178,11 @@ class Database:
             return []
         
         try:
-            cursor = self.connection.cursor()
-            cursor.execute(sql, params)
-            rows = cursor.fetchall()
-            return [dict(row) for row in rows]
+            with self._lock:  # Thread-safe database access
+                cursor = self.connection.cursor()
+                cursor.execute(sql, params)
+                rows = cursor.fetchall()
+                return [dict(row) for row in rows]
         
         except Exception as e:
             logger.error(f"Query failed: {e}")
