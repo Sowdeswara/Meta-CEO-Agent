@@ -151,9 +151,6 @@ class Validator:
             confidence=round(confidence, 2),
             roi_viable=round(roi_viable, 2)
         )
-        
-        logger.debug(f"Validation Score: {score.to_dict()}")
-        return score
     
     def validate_decision(
         self,
@@ -186,25 +183,82 @@ class Validator:
         except (ValueError, TypeError):
             errors.append(f"Invalid confidence value: {confidence}")
         
-        # Determine status and escalation logic
-        if score.weighted_score >= self.validation_threshold:
-            status = ValidationStatus.PASS
-            logger.info(f"Validation PASSED (score: {score.weighted_score:.2f})")
+        # New validation: agent score variance and risk signals
+        arbitration_score = decision_data.get('arbitration_score', 0.5)
+        agent_scores = decision_data.get('agent_scores', {})
+        
+        # Calculate agent score variance
+        if agent_scores:
+            scores_list = list(agent_scores.values())
+            if len(scores_list) > 1:
+                mean_score = sum(scores_list) / len(scores_list)
+                variance = sum((s - mean_score) ** 2 for s in scores_list) / len(scores_list)
+                score_variance = min(variance, 1.0)  # Cap at 1.0
+            else:
+                score_variance = 0.0
         else:
-            # If score is extremely low (much below threshold), escalate
-            if score.weighted_score < (self.validation_threshold * 0.5):
+            score_variance = 0.5  # Default if no agent scores
+        
+        # Risk signals assessment
+        risk_signals = 0
+        if arbitration_score < 0.4:
+            risk_signals += 2  # High risk
+        elif arbitration_score < 0.6:
+            risk_signals += 1  # Medium risk
+        
+        if score_variance > 0.3:
+            risk_signals += 1  # High variance indicates inconsistency
+        
+        roi_estimate = decision_data.get('roi_estimate', 0)
+        if roi_estimate < 0:
+            risk_signals += 1  # Negative ROI
+        
+        risk_level = min(risk_signals / 4, 1.0)  # Normalize to 0-1
+        
+        # Enhanced validation score incorporating new factors
+        base_score = score.weighted_score
+        variance_penalty = score_variance * 0.2  # Reduce score for high variance
+        risk_penalty = risk_level * 0.3  # Reduce score for high risk
+        
+        enhanced_validation_score = max(base_score - variance_penalty - risk_penalty, 0.0)
+        
+        # Confidence score based on consistency and strength
+        confidence_score = (1 - score_variance) * 0.6 + enhanced_validation_score * 0.4
+        
+        # Determine decision status based on enhanced validation score
+        if enhanced_validation_score >= 0.75:
+            decision_status = "accepted"
+        elif enhanced_validation_score >= 0.50:
+            decision_status = "escalate" 
+        else:
+            decision_status = "rejected"
+        
+        # Update ValidationResult to include new fields
+        # For backward compatibility, we'll store them in the score object
+        score.confidence_score = confidence_score
+        score.validation_score = enhanced_validation_score
+        score.score_variance = score_variance
+        score.risk_signals = risk_signals
+        
+        # Determine ValidationStatus for backward compatibility
+        if enhanced_validation_score >= self.validation_threshold:
+            status = ValidationStatus.PASS
+            logger.info(f"Validation PASSED (enhanced score: {enhanced_validation_score:.2f})")
+        else:
+            if enhanced_validation_score < (self.validation_threshold * 0.5):
                 status = ValidationStatus.ESCALATE
-                logger.warning(f"Validation ESCALATED (score: {score.weighted_score:.2f})")
+                logger.warning(f"Validation ESCALATED (enhanced score: {enhanced_validation_score:.2f})")
             else:
                 status = ValidationStatus.FAIL
-                logger.warning(f"Validation FAILED (score: {score.weighted_score:.2f})")
+                logger.warning(f"Validation FAILED (enhanced score: {enhanced_validation_score:.2f})")
         
         return ValidationResult(
             status=status,
             score=score,
             errors=errors,
             warnings=warnings,
-            retry_count=0
+            retry_count=0,
+            decision_status=decision_status
         )
     
     def assess_risk(self, decision_data: Dict[str, Any]) -> str:

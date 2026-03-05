@@ -85,6 +85,11 @@ class Database:
                 risk_level TEXT NOT NULL,
                 roi_estimate REAL NOT NULL,
                 validation_score REAL NOT NULL,
+                product_score REAL DEFAULT 0.0,
+                finance_score REAL DEFAULT 0.0,
+                market_score REAL DEFAULT 0.0,
+                competitive_score REAL DEFAULT 0.0,
+                arbitration_score REAL DEFAULT 0.0,
                 status TEXT NOT NULL,
                 reasoning TEXT NOT NULL,
                 currency TEXT DEFAULT 'USD',
@@ -134,11 +139,20 @@ class Database:
             with self._lock:  # Thread-safe database access
                 cursor = self.connection.cursor()
                 
+                # Extract agent scores from reasoning
+                agent_scores = decision.reasoning.get('arbitration', {}).get('agent_scores', {})
+                product_score = agent_scores.get('product_strategy', 0.0)
+                finance_score = agent_scores.get('finance_optimization', 0.0)
+                market_score = agent_scores.get('market_intelligence', 0.0)
+                competitive_score = agent_scores.get('competitive_strategy', 0.0)
+                arbitration_score = decision.reasoning.get('arbitration', {}).get('composite_score', 0.0)
+                
                 cursor.execute('''
                     INSERT INTO decisions 
                     (id, timestamp, prompt, agent_used, decision_text, confidence, 
-                     risk_level, roi_estimate, validation_score, status, reasoning, currency)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     risk_level, roi_estimate, validation_score, product_score, finance_score,
+                     market_score, competitive_score, arbitration_score, status, reasoning, currency)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     decision.decision_id,
                     decision.timestamp.isoformat(),
@@ -149,6 +163,11 @@ class Database:
                     decision.risk_level,
                     decision.roi_estimate,
                     decision.validation_score,
+                    product_score,
+                    finance_score,
+                    market_score,
+                    competitive_score,
+                    arbitration_score,
                     decision.status.value,
                     json.dumps(decision.reasoning),
                     'USD'

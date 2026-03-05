@@ -195,7 +195,7 @@ async function submitDecision() {
       return;
     }
     
-    lastDecision = data.decision;
+    lastDecision = data;
     console.log('[HELM] Decision received. Rendering...');
     renderResult(lastDecision);
     
@@ -250,13 +250,13 @@ function renderSimpleMode(decision) {
   textEl.textContent = decision.decision_text || 'N/A';
   console.log('[HELM] Decision text set:', textEl.textContent);
   
-  // Status badge
+  // Status badge - use decision field for status
   const badge = document.getElementById('status-badge');
   if (!badge) {
     console.error('[HELM] ERROR: #status-badge not found');
     return;
   }
-  const status = decision.status || 'unknown';
+  const status = decision.decision || 'unknown';
   badge.textContent = status.toUpperCase();
   badge.classList.remove('accept', 'reject', 'escalate');
   
@@ -269,18 +269,15 @@ function renderSimpleMode(decision) {
   }
   console.log('[HELM] Status badge set to:', status);
   
-  // Metrics
+  // Metrics - only confidence and ROI for simple mode
   try {
-    document.getElementById('metric-val-score').textContent = 
-      (decision.validation_score * 100).toFixed(0) + '%';
     document.getElementById('metric-confidence').textContent = 
       (decision.confidence * 100).toFixed(0) + '%';
     document.getElementById('metric-roi').textContent = 
-      (decision.roi_estimate * 100).toFixed(1) + '%';
-    document.getElementById('metric-risk').textContent = decision.risk_level || 'N/A';
-    console.log('[HELM] Metrics rendered');
+      (decision.roi * 100).toFixed(1) + '%';
+    console.log('[HELM] Simple mode metrics rendered');
   } catch (metricErr) {
-    console.error('[HELM] Error rendering metrics:', metricErr);
+    console.error('[HELM] Error rendering simple metrics:', metricErr);
   }
   
   // Arbitration chart
@@ -311,14 +308,34 @@ function renderArbChart(decision) {
   
   console.log('[HELM] Creating arbChart with Chart.js');
   const ctx = chartElement.getContext('2d');
-  charts.arb = new Chart(ctx, {
-    type: 'bar',
-    data: {
+  
+  let chartData;
+  if (currentMode === 'simple') {
+    // Simple mode: Strategy Score, Finance Score, Final Arbitration Score
+    chartData = {
+      labels: ['Strategy Score', 'Finance Score', 'Arbitration Score'],
+      datasets: [{
+        label: 'Score',
+        data: [
+          decision.scores?.product_strategy || 0,
+          decision.scores?.finance || 0,
+          decision.arbitration_score || 0
+        ],
+        backgroundColor: [
+          'rgba(59, 130, 246, 0.8)',
+          'rgba(16, 185, 129, 0.8)',
+          'rgba(245, 158, 11, 0.8)'
+        ]
+      }]
+    };
+  } else {
+    // Expert mode: Arbitration components
+    chartData = {
       labels: ['Strategy', 'Finance', 'Risk Adj.'],
       datasets: [{
         label: 'Score Component',
         data: [
-          arb.strategy_component || 0,
+          arb.product_component || 0,
           arb.finance_component || 0,
           arb.risk_adjustment || 0
         ],
@@ -326,16 +343,14 @@ function renderArbChart(decision) {
           'rgba(59, 130, 246, 0.8)',
           'rgba(16, 185, 129, 0.8)',
           'rgba(245, 158, 11, 0.8)'
-        ],
-        borderColor: [
-          'rgb(59, 130, 246)',
-          'rgb(16, 185, 129)',
-          'rgb(245, 158, 11)'
-        ],
-        borderWidth: 2,
-        borderRadius: 6
+        ]
       }]
-    },
+    };
+  }
+  
+  charts.arb = new Chart(ctx, {
+    type: 'bar',
+    data: chartData,
     options: {
       responsive: true,
       maintainAspectRatio: true,
@@ -370,6 +385,7 @@ function renderExpertCharts(decision) {
   renderValidationChart(decision);
   renderRiskRoiChart(decision);
   renderArbDetails(arb);
+  renderDecisionTrace(decision);
 }
 
 function renderAgentChart(decision) {
@@ -381,17 +397,26 @@ function renderAgentChart(decision) {
   charts.agent = new Chart(ctx, {
     type: 'doughnut',
     data: {
-      labels: ['Strategy', 'Finance'],
+      labels: ['Product Strategy', 'Finance', 'Market Intelligence', 'Competitive Strategy'],
       datasets: [{
         data: [
-          arb.strategy_component || 0,
-          arb.finance_component || 0
+          arb.product_component || 0,
+          arb.finance_component || 0,
+          arb.market_component || 0,
+          arb.competitive_component || 0
         ],
         backgroundColor: [
-          'rgba(59, 130, 246, 0.8)',
-          'rgba(16, 185, 129, 0.8)'
+          'rgba(59, 130, 246, 0.8)',  // Blue
+          'rgba(16, 185, 129, 0.8)',  // Green
+          'rgba(245, 158, 11, 0.8)',  // Orange
+          'rgba(239, 68, 68, 0.8)'    // Red
         ],
-        borderColor: ['rgb(59, 130, 246)', 'rgb(16, 185, 129)'],
+        borderColor: [
+          'rgb(59, 130, 246)',
+          'rgb(16, 185, 129)',
+          'rgb(245, 158, 11)',
+          'rgb(239, 68, 68)'
+        ],
         borderWidth: 2
       }]
     },
@@ -505,16 +530,28 @@ function renderArbDetails(arb) {
       <value>${(arb.composite_score || 0).toFixed(4)}</value>
     </div>
     <div class="arb-detail-row">
-      <label>Strategy Component:</label>
-      <value>${((arb.strategy_component || 0) * 100).toFixed(1)}%</value>
+      <label>Product Strategy:</label>
+      <value>${((arb.product_component || 0) * 100).toFixed(1)}%</value>
     </div>
     <div class="arb-detail-row">
-      <label>Finance Component:</label>
+      <label>Finance Optimization:</label>
       <value>${((arb.finance_component || 0) * 100).toFixed(1)}%</value>
+    </div>
+    <div class="arb-detail-row">
+      <label>Market Intelligence:</label>
+      <value>${((arb.market_component || 0) * 100).toFixed(1)}%</value>
+    </div>
+    <div class="arb-detail-row">
+      <label>Competitive Strategy:</label>
+      <value>${((arb.competitive_component || 0) * 100).toFixed(1)}%</value>
     </div>
     <div class="arb-detail-row">
       <label>Risk Adjustment:</label>
       <value>${((arb.risk_adjustment || 0) * 100).toFixed(1)}%</value>
+    </div>
+    <div class="arb-detail-row">
+      <label>Score Variance:</label>
+      <value>${(arb.score_variance || 0).toFixed(3)}</value>
     </div>
     <div class="arb-detail-row">
       <label>Dominant Factor:</label>
@@ -527,6 +564,21 @@ function renderArbDetails(arb) {
   `;
   
   container.innerHTML = html;
+}
+
+function renderDecisionTrace(decision) {
+  const arb = decision.reasoning?.arbitration || {};
+  const agent_scores = arb.agent_scores || {};
+  
+  document.getElementById('trace-decision-id').textContent = decision.decision_id || '—';
+  document.getElementById('trace-status').textContent = decision.decision || '—';
+  document.getElementById('trace-product-score').textContent = (agent_scores.product_strategy * 100).toFixed(1) + '%';
+  document.getElementById('trace-finance-score').textContent = (agent_scores.finance_optimization * 100).toFixed(1) + '%';
+  document.getElementById('trace-market-score').textContent = (agent_scores.market_intelligence * 100).toFixed(1) + '%';
+  document.getElementById('trace-competitive-score').textContent = (agent_scores.competitive_strategy * 100).toFixed(1) + '%';
+  document.getElementById('trace-arbitration-score').textContent = (arb.composite_score * 100).toFixed(1) + '%';
+  document.getElementById('trace-validation-score').textContent = (decision.validation_score * 100).toFixed(1) + '%';
+  document.getElementById('trace-reasoning').textContent = decision.decision_text || '—';
 }
 
 // ===== RAW JSON TOGGLE =====

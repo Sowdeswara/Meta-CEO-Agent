@@ -282,7 +282,7 @@ class ProductStrategyAgent:
         """
         self.config = config
         self.llm = llm
-        self.agent_type = AgentType.STRATEGY
+        self.agent_type = AgentType.PRODUCT_STRATEGY
     
     def process(self, decision_input: DecisionInput) -> StructuredDecision:
         """Process strategic decision request

@@ -26,7 +26,19 @@ class DecisionRequest(BaseModel):
 
 
 class DecisionResponse(BaseModel):
-    decision: Dict[str, Any]
+    decision: str  # Decision status as string
+    confidence: float
+    roi: float
+    scores: Dict[str, float]
+    arbitration_score: float
+    validation_score: float
+    reasoning: Dict[str, Any]
+    decision_id: str
+    agent_used: str
+    decision_text: str
+    risk_level: str
+    status: str
+    timestamp: Optional[str]
 
 
 @app.on_event("startup")
@@ -76,7 +88,7 @@ def run_decision(req: DecisionRequest):
     with helm_lock:
         try:
             decision = helm_instance.process_decision(req.prompt, req.context or {}, req.required_fields or [])
-            return DecisionResponse(decision=decision)
+            return DecisionResponse(**decision)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 

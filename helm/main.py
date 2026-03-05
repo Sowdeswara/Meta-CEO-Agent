@@ -9,8 +9,10 @@ from .config import Config
 from .environment.system_check import SystemCheck
 from .validation.validator import Validator
 from .agents.head_agent import HeadAgent
-from .agents.strategy_agent import StrategyAgent
-from .agents.finance_agent import FinanceAgent
+from .agents.product_strategy_agent import ProductStrategyAgent
+from .agents.competitive_strategy_agent import CompetitiveStrategyAgent
+from .agents.market_intelligence_agent import MarketIntelligenceAgent
+from .agents.finance_agent import FinanceOptimizationAgent
 from .models.local_model import LocalModel
 from .models.api_model import APIModel
 from .schemas import DecisionInput, ModelConfig, AgentType
@@ -118,12 +120,16 @@ class HELM:
         
         # 7. Initialize agents
         self.head_agent = HeadAgent(self.config, self.validator)
-        self.strategy_agent = StrategyAgent(self.config, self.local_model or self.api_model)
-        self.finance_agent = FinanceAgent(self.config, self.local_model or self.api_model)
+        self.product_strategy_agent = ProductStrategyAgent(self.config, self.local_model or self.api_model)
+        self.competitive_strategy_agent = CompetitiveStrategyAgent(self.config, self.local_model or self.api_model)
+        self.market_intelligence_agent = MarketIntelligenceAgent(self.config, self.local_model or self.api_model)
+        self.finance_optimization_agent = FinanceOptimizationAgent(self.config, self.local_model or self.api_model)
         
         # Register agents with head agent
-        self.head_agent.register_agent(AgentType.STRATEGY, self.strategy_agent)
-        self.head_agent.register_agent(AgentType.FINANCE, self.finance_agent)
+        self.head_agent.register_agent(AgentType.PRODUCT_STRATEGY, self.product_strategy_agent)
+        self.head_agent.register_agent(AgentType.COMPETITIVE_STRATEGY, self.competitive_strategy_agent)
+        self.head_agent.register_agent(AgentType.MARKET_INTELLIGENCE, self.market_intelligence_agent)
+        self.head_agent.register_agent(AgentType.FINANCE_OPTIMIZATION, self.finance_optimization_agent)
         logger.info("[OK] All agents initialized and registered")
         
         # 8. Initialize dashboard (optional) - dynamic import to avoid Streamlit
@@ -170,7 +176,37 @@ class HELM:
         self.db.insert_decision(decision)
         logger.info(f"Decision stored: {decision.decision_id}")
         
-        return decision.to_dict()
+        # Format response according to new API specification
+        arbitration_data = decision.reasoning.get('arbitration', {})
+        agent_scores = arbitration_data.get('agent_scores', {})
+        
+        # Get decision status from validation
+        validation_data = decision.reasoning.get('validation', {})
+        decision_status = validation_data.get('score', {}).get('decision_status', 'ACCEPT')
+        
+        # Construct response with proper structure
+        response = {
+            "decision": decision_status,
+            "confidence": decision.confidence,
+            "roi": decision.roi_estimate,
+            "scores": {
+                "product_strategy": agent_scores.get('product_strategy', 0.0),
+                "finance": agent_scores.get('finance_optimization', 0.0),
+                "market_intelligence": agent_scores.get('market_intelligence', 0.0),
+                "competitive_strategy": agent_scores.get('competitive_strategy', 0.0)
+            },
+            "arbitration_score": arbitration_data.get('composite_score', 0.0),
+            "validation_score": decision.validation_score,
+            "reasoning": decision.reasoning,
+            "decision_id": decision.decision_id,
+            "agent_used": decision.agent_used,
+            "decision_text": decision.decision_text,
+            "risk_level": decision.risk_level,
+            "status": decision.status,
+            "timestamp": decision.timestamp.isoformat() if decision.timestamp else None
+        }
+        
+        return response
     
     def get_decision_history(self, limit: int = 10) -> list:
         """Get recent decision history

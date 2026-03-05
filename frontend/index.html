@@ -13,7 +13,13 @@
       <div class="header-content">
         <h1 class="logo">⚙️ HELM </h1>
         <p class="subtitle">Deterministic Executive Decision Authority</p>
-        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark/light theme">🌙</button>
+        <div class="header-controls">
+          <div class="mode-toggle">
+            <button class="mode-btn active" data-mode="simple">Simple</button>
+            <button class="mode-btn" data-mode="expert">Expert</button>
+          </div>
+          <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark/light theme">🌙</button>
+        </div>
       </div>
     </header>
 
@@ -69,12 +75,6 @@
         </div>
       </section>
 
-      <!-- Mode Selector -->
-      <div class="mode-selector">
-        <button class="mode-btn active" data-mode="simple">Simple Mode</button>
-        <button class="mode-btn" data-mode="expert">Expert Mode</button>
-      </div>
-
       <!-- Result Section -->
       <section id="result-section" class="result-section hidden">
         <!-- Simple Mode -->
@@ -88,11 +88,7 @@
             <div class="decision-content">
               <p id="decision-text" class="decision-text">—</p>
               
-              <div class="metrics-grid">
-                <div class="metric-box">
-                  <label>Validation Score</label>
-                  <div class="metric-value" id="metric-val-score">—</div>
-                </div>
+              <div class="simple-metrics">
                 <div class="metric-box">
                   <label>Confidence</label>
                   <div class="metric-value" id="metric-confidence">—</div>
@@ -101,14 +97,10 @@
                   <label>ROI Estimate</label>
                   <div class="metric-value" id="metric-roi">—</div>
                 </div>
-                <div class="metric-box">
-                  <label>Risk Level</label>
-                  <div class="metric-value" id="metric-risk">—</div>
-                </div>
               </div>
 
               <div class="chart-container">
-                <h3>Arbitration Breakdown</h3>
+                <h3>Decision Overview</h3>
                 <canvas id="arbChart" width="300" height="150"></canvas>
               </div>
             </div>
@@ -140,6 +132,49 @@
             <div class="expert-card">
               <h3>Arbitration Composition</h3>
               <div id="arb-details" class="arb-details"></div>
+            </div>
+
+            <!-- Decision Trace -->
+            <div class="expert-card">
+              <h3>Decision Trace</h3>
+              <div id="decision-trace" class="decision-trace">
+                <div class="trace-row">
+                  <label>Decision ID:</label>
+                  <value id="trace-decision-id">—</value>
+                </div>
+                <div class="trace-row">
+                  <label>Status:</label>
+                  <value id="trace-status">—</value>
+                </div>
+                <div class="trace-row">
+                  <label>Product Strategy:</label>
+                  <value id="trace-product-score">—</value>
+                </div>
+                <div class="trace-row">
+                  <label>Finance:</label>
+                  <value id="trace-finance-score">—</value>
+                </div>
+                <div class="trace-row">
+                  <label>Market Intelligence:</label>
+                  <value id="trace-market-score">—</value>
+                </div>
+                <div class="trace-row">
+                  <label>Competitive Strategy:</label>
+                  <value id="trace-competitive-score">—</value>
+                </div>
+                <div class="trace-row">
+                  <label>Arbitration Score:</label>
+                  <value id="trace-arbitration-score">—</value>
+                </div>
+                <div class="trace-row">
+                  <label>Validation Score:</label>
+                  <value id="trace-validation-score">—</value>
+                </div>
+                <div class="trace-row">
+                  <label>Reasoning:</label>
+                  <value id="trace-reasoning">—</value>
+                </div>
+              </div>
             </div>
           </div>
 

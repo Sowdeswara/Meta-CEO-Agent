@@ -49,10 +49,12 @@ class Config:
         self.retry_backoff = float(os.getenv("RETRY_BACKOFF", "1.0"))
         
         # ============== ARBITRATION SETTINGS ==============
-        # weights for strategy vs finance components (must sum 1.0)
+        # weights for agent components (must sum 1.0)
         self.ARBITRATION_WEIGHTS = {
-            "strategy": float(os.getenv("ARBITRATION_WEIGHT_STRATEGY", "0.5")),
-            "finance": float(os.getenv("ARBITRATION_WEIGHT_FINANCE", "0.5"))
+            "product_strategy": float(os.getenv("ARBITRATION_WEIGHT_PRODUCT_STRATEGY", "0.25")),
+            "competitive_strategy": float(os.getenv("ARBITRATION_WEIGHT_COMPETITIVE_STRATEGY", "0.20")),
+            "market_intelligence": float(os.getenv("ARBITRATION_WEIGHT_MARKET_INTELLIGENCE", "0.25")),
+            "finance_optimization": float(os.getenv("ARBITRATION_WEIGHT_FINANCE_OPTIMIZATION", "0.30"))
         }
         self.RISK_PENALTY_FACTOR = float(os.getenv("RISK_PENALTY_FACTOR", "0.5"))
         

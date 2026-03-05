@@ -59,20 +59,36 @@ class HeadAgent:
         
         # Deterministic keyword-based classification
         finance_keywords = ['profit', 'revenue', 'cost', 'margin', 'financial', 'roi', 'cashflow', 'debt', 'equity']
-        strategy_keywords = ['strategy', 'plan', 'objective', 'goal', 'vision', 'roadmap', 'decision', 'competitive']
+        product_keywords = ['product', 'development', 'innovation', 'features', 'supply', 'chain', 'efficiency']
+        competitive_keywords = ['competition', 'competitor', 'market', 'share', 'positioning', 'advantage']
+        market_keywords = ['market', 'growth', 'demand', 'intelligence', 'forecast', 'trends']
         
         finance_score = sum(1 for kw in finance_keywords if kw in prompt_lower)
-        strategy_score = sum(1 for kw in strategy_keywords if kw in prompt_lower)
+        product_score = sum(1 for kw in product_keywords if kw in prompt_lower)
+        competitive_score = sum(1 for kw in competitive_keywords if kw in prompt_lower)
+        market_score = sum(1 for kw in market_keywords if kw in prompt_lower)
         
-        if finance_score > strategy_score:
-            agent_type = AgentType.FINANCE
-        elif strategy_score > finance_score:
-            agent_type = AgentType.STRATEGY
+        # Find the highest scoring category
+        scores = {
+            'finance': finance_score,
+            'product': product_score, 
+            'competitive': competitive_score,
+            'market': market_score
+        }
+        max_category = max(scores, key=scores.get)
+        
+        if max_category == 'finance':
+            agent_type = AgentType.FINANCE_OPTIMIZATION
+        elif max_category == 'product':
+            agent_type = AgentType.PRODUCT_STRATEGY
+        elif max_category == 'competitive':
+            agent_type = AgentType.COMPETITIVE_STRATEGY
+        elif max_category == 'market':
+            agent_type = AgentType.MARKET_INTELLIGENCE
         else:
-            # Default to STRATEGY for ambiguous cases
-            agent_type = AgentType.STRATEGY
+            agent_type = AgentType.PRODUCT_STRATEGY  # Default
         
-        logger.info(f"Task classified as: {agent_type.value} (finance_score={finance_score}, strategy_score={strategy_score})")
+        logger.info(f"Task classified as: {agent_type.value} (scores: finance={finance_score}, product={product_score}, competitive={competitive_score}, market={market_score})")
         return agent_type
     
     def process(self, decision_input: DecisionInput) -> StructuredDecision:
@@ -108,18 +124,31 @@ class HeadAgent:
                 status=DecisionStatus.REJECTED
             )
         
-        # Step 2: Run both specialized agents (if available)
-        strat_dec = None
-        fin_dec = None
-        if AgentType.STRATEGY in self.agents:
-            strat_dec = self.agents[AgentType.STRATEGY].process(decision_input)
-        if AgentType.FINANCE in self.agents:
-            fin_dec = self.agents[AgentType.FINANCE].process(decision_input)
+        # Step 1.5: Derive market signals from business inputs
+        derived_signals = self._derive_market_signals(decision_input.context)
+        decision_input.context.update(derived_signals)
+        logger.info(f"Derived market signals: {derived_signals}")
+        
+        # Step 2: Run all specialized agents (if available)
+        product_dec = None
+        competitive_dec = None
+        market_dec = None
+        finance_dec = None
+        if AgentType.PRODUCT_STRATEGY in self.agents:
+            product_dec = self.agents[AgentType.PRODUCT_STRATEGY].process(decision_input)
+        if AgentType.COMPETITIVE_STRATEGY in self.agents:
+            competitive_dec = self.agents[AgentType.COMPETITIVE_STRATEGY].process(decision_input)
+        if AgentType.MARKET_INTELLIGENCE in self.agents:
+            market_dec = self.agents[AgentType.MARKET_INTELLIGENCE].process(decision_input)
+        if AgentType.FINANCE_OPTIMIZATION in self.agents:
+            finance_dec = self.agents[AgentType.FINANCE_OPTIMIZATION].process(decision_input)
 
         # Step 3: Arbitration
-        arb_output = self.arbitrator.compute(
-            strat_dec or self._default_decision(decision_id, AgentType.STRATEGY, decision_input),
-            fin_dec or self._default_decision(decision_id, AgentType.FINANCE, decision_input)
+        arb_output = self.arbitrator.compute_multi(
+            product_dec or self._default_decision(decision_id, AgentType.PRODUCT_STRATEGY, decision_input),
+            competitive_dec or self._default_decision(decision_id, AgentType.COMPETITIVE_STRATEGY, decision_input),
+            market_dec or self._default_decision(decision_id, AgentType.MARKET_INTELLIGENCE, decision_input),
+            finance_dec or self._default_decision(decision_id, AgentType.FINANCE_OPTIMIZATION, decision_input)
         )
         # add arbitration score to context for validation
         decision_input.context['arbitration_score'] = arb_output['composite_score']
@@ -133,10 +162,18 @@ class HeadAgent:
         logger.info(f"Post-arbitration validation result: {validation_result.status.value} (score: {validation_result.score.weighted_score:.2f})")
 
         # pick dominant decision for output
-        if arb_output['dominant_factor'] == 'finance':
-            decision = fin_dec if fin_dec else strat_dec
+        dominant_factor = arb_output['dominant_factor']
+        if dominant_factor == 'finance_optimization':
+            decision = finance_dec
+        elif dominant_factor == 'product_strategy':
+            decision = product_dec
+        elif dominant_factor == 'competitive_strategy':
+            decision = competitive_dec
+        elif dominant_factor == 'market_intelligence':
+            decision = market_dec
         else:
-            decision = strat_dec if strat_dec else fin_dec
+            decision = finance_dec  # fallback to finance
+        
         if decision is None:
             decision = self._default_decision(decision_id, AgentType.HEAD, decision_input)
 
@@ -260,6 +297,37 @@ class HeadAgent:
             validation_score=0.0,
             status=DecisionStatus.ESCALATED
         )
+    
+    def _derive_market_signals(self, context: Dict[str, Any]) -> Dict[str, float]:
+        """Derive market signals from business inputs
+        
+        Args:
+            context: Business context with revenue, costs, investment, etc.
+            
+        Returns:
+            Dict with derived market signals
+        """
+        revenue = context.get('revenue', 0)
+        costs = context.get('costs', 0)
+        investment = context.get('investment', 0)
+        expected_returns = context.get('expected_returns', 0)
+        
+        # Derive signals using business logic
+        demand_index = min(expected_returns / max(investment, 1), 1.0)
+        competitor_strength = min(costs / max(revenue, 1), 1.0)
+        market_growth = min((expected_returns - investment) / max(investment, 1), 1.0)
+        product_innovation = 0.5 + (expected_returns / max(investment, 1)) * 0.3
+        product_innovation = min(product_innovation, 1.0)
+        supply_chain_efficiency = max(0.3, revenue / max(costs, 1))
+        supply_chain_efficiency = min(supply_chain_efficiency, 1.0)
+        
+        return {
+            'market_growth': market_growth,
+            'demand_index': demand_index,
+            'competitor_strength': competitor_strength,
+            'product_innovation': product_innovation,
+            'supply_chain_efficiency': supply_chain_efficiency
+        }
     
     def validate_result(self, result: Dict[str, Any]) -> bool:
         """Validate agent outputs

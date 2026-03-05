@@ -79,6 +79,41 @@ body {
   align-items: center;
 }
 
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.mode-toggle {
+  display: flex;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.mode-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.mode-btn.active {
+  background: var(--accent-primary);
+  color: white;
+}
+
+.mode-btn:hover {
+  background: var(--accent-secondary);
+  color: white;
+}
+
 .logo {
   font-size: 2rem;
   font-weight: 700;
@@ -430,6 +465,33 @@ body {
 .arb-detail-row value {
   color: var(--accent-primary);
   font-weight: 700;
+}
+
+.decision-trace {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.trace-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  border-left: 3px solid var(--accent-primary);
+}
+
+.trace-row label {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.trace-row value {
+  color: var(--accent-primary);
+  font-weight: 700;
+  font-size: 0.9rem;
 }
 
 /* Raw JSON Section */

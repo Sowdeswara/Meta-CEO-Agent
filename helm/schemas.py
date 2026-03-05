@@ -5,15 +5,17 @@ Pydantic schemas for deterministic validation and typing
 
 from dataclasses import dataclass, asdict
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Literal
+from typing import Any, Dict, List, Literal
 from enum import Enum
 
 
 class AgentType(str, Enum):
     """Agent type enumeration"""
     HEAD = "head"
-    STRATEGY = "strategy"
-    FINANCE = "finance"
+    PRODUCT_STRATEGY = "product_strategy"
+    COMPETITIVE_STRATEGY = "competitive_strategy"
+    MARKET_INTELLIGENCE = "market_intelligence"
+    FINANCE_OPTIMIZATION = "finance_optimization"
     ESCALATION = "escalation"
 
 
@@ -99,6 +101,7 @@ class ValidationResult:
     errors: List[str]
     warnings: List[str]
     retry_count: int = 0
+    decision_status: str = "ACCEPT"
     
     def passed(self, threshold: float = 0.70) -> bool:
         """Check if validation passed threshold"""
@@ -114,7 +117,8 @@ class ValidationResult:
             'score': self.score.to_dict(),
             'errors': self.errors,
             'warnings': self.warnings,
-            'retry_count': self.retry_count
+            'retry_count': self.retry_count,
+            'decision_status': self.decision_status
         }
 
 

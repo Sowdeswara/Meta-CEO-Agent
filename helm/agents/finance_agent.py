@@ -1,5 +1,5 @@
 """
-Finance Agent - Handles financial analysis and calculations
+Finance Optimization Agent - Handles financial analysis and optimization
 Deterministic financial metrics and ROI calculations
 """
 
@@ -15,7 +15,7 @@ from ..schemas import (
 logger = logging.getLogger(__name__)
 
 
-class FinanceAgent:
+class FinanceOptimizationAgent:
     """Agent responsible for financial analysis and calculations"""
     
     def __init__(self, config=None, llm=None):
@@ -27,7 +27,7 @@ class FinanceAgent:
         """
         self.config = config
         self.llm = llm
-        self.agent_type = AgentType.FINANCE
+        self.agent_type = AgentType.FINANCE_OPTIMIZATION
     
     def process(self, decision_input: DecisionInput) -> StructuredDecision:
         """Process financial decision request
