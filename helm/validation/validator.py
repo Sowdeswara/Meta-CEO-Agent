@@ -151,6 +151,8 @@ class Validator:
             confidence=round(confidence, 2),
             roi_viable=round(roi_viable, 2)
         )
+        
+        return score
     
     def validate_decision(
         self,

@@ -88,6 +88,7 @@ class ProductStrategyAgent:
         Returns:
             Dict with extracted product strategic factors
         """
+        market_signals = context.get('market_signals', {})
         factors = {
             'objectives': context.get('objectives', []),
             'constraints': context.get('constraints', []),
@@ -95,8 +96,8 @@ class ProductStrategyAgent:
             'timeline': context.get('timeline', ''),
             'stakeholders': context.get('stakeholders', []),
             'risk_tolerance': context.get('risk_tolerance', 'medium'),
-            'product_innovation': context.get('product_innovation', 0.5),
-            'supply_chain_efficiency': context.get('supply_chain_efficiency', 0.5)
+            'product_innovation': market_signals.get('product_innovation', 0.5),
+            'supply_chain_efficiency': market_signals.get('supply_chain_efficiency', 0.5)
         }
 
         logger.debug(f"Extracted product factors: {len(factors)} categories")

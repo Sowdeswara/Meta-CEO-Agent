@@ -149,6 +149,42 @@ class HELM:
         logger.info("HELM v2.0 - Initialization Complete")
         logger.info("=" * 60)
     
+    def _derive_market_signals(self, context: dict) -> dict:
+        """Derive internal market signals from user-provided business inputs
+        
+        Args:
+            context: User context with revenue, costs, investment, expected_returns
+            
+        Returns:
+            dict: Enriched context with derived signals
+        """
+        enriched = context.copy()
+        
+        # Extract values with defaults to avoid division by zero
+        revenue = float(context.get('revenue', 1))
+        costs = float(context.get('costs', 1))
+        investment = float(context.get('investment', 1))
+        expected_returns = float(context.get('expected_returns', investment + 1))
+        
+        # Derive signals using the specified formulas
+        demand_index = expected_returns / investment
+        competitor_strength = min(costs / revenue, 1.0)
+        market_growth = min((expected_returns - investment) / investment, 1.0)
+        product_innovation = 0.5 + (expected_returns / investment) * 0.3
+        supply_chain_efficiency = max(0.3, revenue / costs)
+        
+        # Add derived signals to context
+        enriched['market_signals'] = {
+            'demand_index': demand_index,
+            'competitor_strength': competitor_strength,
+            'market_growth': market_growth,
+            'product_innovation': product_innovation,
+            'supply_chain_efficiency': supply_chain_efficiency
+        }
+        
+        logger.info(f"Derived market signals: {enriched['market_signals']}")
+        return enriched
+    
     def process_decision(self, prompt: str, context: dict, required_fields: list) -> dict:
         """Process a decision request through HELM
         
@@ -160,10 +196,13 @@ class HELM:
         Returns:
             dict: Final decision
         """
+        # Derive market signals from user inputs
+        enriched_context = self._derive_market_signals(context)
+        
         # Create decision input
         decision_input = DecisionInput(
             prompt=prompt,
-            context=context,
+            context=enriched_context,
             user_id=context.get('user_id', 'system'),
             session_id=context.get('session_id', 'default'),
             required_fields=required_fields
@@ -180,9 +219,43 @@ class HELM:
         arbitration_data = decision.reasoning.get('arbitration', {})
         agent_scores = arbitration_data.get('agent_scores', {})
         
-        # Get decision status from validation
-        validation_data = decision.reasoning.get('validation', {})
-        decision_status = validation_data.get('score', {}).get('decision_status', 'ACCEPT')
+        # decide final status using arbitration score (validation remains for data quality)
+        # previous implementation relied solely on validation decision_status which
+        # caused poor-arbitration results to still be marked ACCEPT.  instead we
+        # derive our own threshold rules here.
+        arbitration_data = decision.reasoning.get('arbitration', {})
+        arb_score = arbitration_data.get('composite_score', 0.0)
+        
+        # optionally perturb arbitration score to avoid perfectly static outputs
+        jitter = self.config.get('ARBITRATION_JITTER', 0.0)
+        if jitter and jitter > 0.0:
+            try:
+                import random
+                arb_score += random.uniform(-jitter, jitter)
+                arb_score = max(0.0, min(1.0, arb_score))
+            except Exception:
+                pass  # don't fail if random cannot be imported
+
+        # default status is ACCEPT unless we fall below configurable thresholds
+        reject_thr = self.config.get('ARBITRATION_REJECT_THRESHOLD', 0.30)
+        escalate_thr = self.config.get('ARBITRATION_ESCALATE_THRESHOLD', 0.50)
+        if arb_score < reject_thr:
+            decision_status = 'REJECT'
+        elif arb_score < escalate_thr:
+            decision_status = 'ESCALATE'
+        else:
+            decision_status = 'ACCEPT'
+        
+        # validation could still flag serious schema issues but it doesn't
+        # override arbitration by default; if desired we could combine them.
+        # existing normalization logic remains useful for mapping legacy values.
+        decision_status = decision_status.upper()
+        if decision_status == 'ACCEPTED':
+            decision_status = 'ACCEPT'
+        elif decision_status == 'REJECTED':
+            decision_status = 'REJECT'
+        elif decision_status == 'ESCALATE':
+            decision_status = 'ESCALATE'
         
         # Construct response with proper structure
         response = {
@@ -199,7 +272,7 @@ class HELM:
             "validation_score": decision.validation_score,
             "reasoning": decision.reasoning,
             "decision_id": decision.decision_id,
-            "agent_used": decision.agent_used,
+            "agent_used": "HELM",
             "decision_text": decision.decision_text,
             "risk_level": decision.risk_level,
             "status": decision.status,

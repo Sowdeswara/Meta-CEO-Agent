@@ -88,6 +88,7 @@ class CompetitiveStrategyAgent:
         Returns:
             Dict with extracted competitive strategic factors
         """
+        market_signals = context.get('market_signals', {})
         factors = {
             'objectives': context.get('objectives', []),
             'constraints': context.get('constraints', []),
@@ -95,8 +96,8 @@ class CompetitiveStrategyAgent:
             'timeline': context.get('timeline', ''),
             'stakeholders': context.get('stakeholders', []),
             'risk_tolerance': context.get('risk_tolerance', 'medium'),
-            'competitor_strength': context.get('competitor_strength', 0.5),
-            'market_growth': context.get('market_growth', 0.5)
+            'competitor_strength': market_signals.get('competitor_strength', 0.5),
+            'market_growth': market_signals.get('market_growth', 0.5)
         }
 
         logger.debug(f"Extracted competitive factors: {len(factors)} categories")

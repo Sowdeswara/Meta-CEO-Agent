@@ -58,6 +58,12 @@ class Config:
         }
         self.RISK_PENALTY_FACTOR = float(os.getenv("RISK_PENALTY_FACTOR", "0.5"))
         
+        # arbitration thresholds (can be tuned via environment)
+        self.ARBITRATION_REJECT_THRESHOLD = float(os.getenv("ARBITRATION_REJECT_THRESHOLD", "0.30"))
+        self.ARBITRATION_ESCALATE_THRESHOLD = float(os.getenv("ARBITRATION_ESCALATE_THRESHOLD", "0.50"))
+        # optional randomness to avoid completely deterministic status
+        self.ARBITRATION_JITTER = float(os.getenv("ARBITRATION_JITTER", "0.00"))
+        
         # ============== SYSTEM SETTINGS ==============
         self.debug_mode = os.getenv("DEBUG_MODE", "False").lower() == "true"
         self.log_level = os.getenv("LOG_LEVEL", "INFO")

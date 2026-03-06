@@ -124,10 +124,8 @@ class HeadAgent:
                 status=DecisionStatus.REJECTED
             )
         
-        # Step 1.5: Derive market signals from business inputs
-        derived_signals = self._derive_market_signals(decision_input.context)
-        decision_input.context.update(derived_signals)
-        logger.info(f"Derived market signals: {derived_signals}")
+        # Step 1.5: Market signals are already derived in main.py and available in context['market_signals']
+        logger.info(f"Using market signals: {decision_input.context.get('market_signals', {})}")
         
         # Step 2: Run all specialized agents (if available)
         product_dec = None
@@ -152,7 +150,8 @@ class HeadAgent:
         )
         # add arbitration score to context for validation
         decision_input.context['arbitration_score'] = arb_output['composite_score']
-
+        decision_input.context['confidence'] = arb_output['confidence']
+        
         # re-run validation with arbitration score included
         validation_result = self.validator.validate_decision(
             decision_input.context,
@@ -297,37 +296,6 @@ class HeadAgent:
             validation_score=0.0,
             status=DecisionStatus.ESCALATED
         )
-    
-    def _derive_market_signals(self, context: Dict[str, Any]) -> Dict[str, float]:
-        """Derive market signals from business inputs
-        
-        Args:
-            context: Business context with revenue, costs, investment, etc.
-            
-        Returns:
-            Dict with derived market signals
-        """
-        revenue = context.get('revenue', 0)
-        costs = context.get('costs', 0)
-        investment = context.get('investment', 0)
-        expected_returns = context.get('expected_returns', 0)
-        
-        # Derive signals using business logic
-        demand_index = min(expected_returns / max(investment, 1), 1.0)
-        competitor_strength = min(costs / max(revenue, 1), 1.0)
-        market_growth = min((expected_returns - investment) / max(investment, 1), 1.0)
-        product_innovation = 0.5 + (expected_returns / max(investment, 1)) * 0.3
-        product_innovation = min(product_innovation, 1.0)
-        supply_chain_efficiency = max(0.3, revenue / max(costs, 1))
-        supply_chain_efficiency = min(supply_chain_efficiency, 1.0)
-        
-        return {
-            'market_growth': market_growth,
-            'demand_index': demand_index,
-            'competitor_strength': competitor_strength,
-            'product_innovation': product_innovation,
-            'supply_chain_efficiency': supply_chain_efficiency
-        }
     
     def validate_result(self, result: Dict[str, Any]) -> bool:
         """Validate agent outputs

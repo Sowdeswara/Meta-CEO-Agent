@@ -88,12 +88,13 @@ class MarketIntelligenceAgent:
         Returns:
             Dict with extracted market intelligence factors
         """
+        market_signals = context.get('market_signals', {})
         factors = {
-            'market_growth': context.get('market_growth', 0.5),
-            'demand_index': context.get('demand_index', 0.5),
-            'competitor_strength': context.get('competitor_strength', 0.5),
-            'product_innovation': context.get('product_innovation', 0.5),
-            'supply_chain_efficiency': context.get('supply_chain_efficiency', 0.5),
+            'market_growth': market_signals.get('market_growth', 0.5),
+            'demand_index': market_signals.get('demand_index', 0.5),
+            'competitor_strength': market_signals.get('competitor_strength', 0.5),
+            'product_innovation': market_signals.get('product_innovation', 0.5),
+            'supply_chain_efficiency': market_signals.get('supply_chain_efficiency', 0.5),
             'economic_indicators': context.get('economic_indicators', {}),
             'regulatory_environment': context.get('regulatory_environment', 'neutral')
         }

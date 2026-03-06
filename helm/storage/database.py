@@ -7,6 +7,7 @@ import sqlite3
 import logging
 import json
 import threading
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..schemas import StructuredDecision

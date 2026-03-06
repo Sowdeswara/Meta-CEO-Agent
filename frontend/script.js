@@ -1,10 +1,21 @@
 /**
  * HELM v3 Frontend - Dark Professional Theme with Mode Toggle
+ *
+ * The script may be loaded twice during development or caching; to avoid
+ * redeclaration errors and duplicate handlers we wrap everything in an IIFE
+ * that checks a one‑time flag on `window`.
  */
 
-let currentMode = 'simple';
-let charts = {};
-let lastDecision = null;
+(function(){
+  if (window.__helm_loaded) {
+    console.log('[HELM] script.js already loaded, skipping second execution');
+    return;
+  }
+  window.__helm_loaded = true;
+
+  var currentMode = window.currentMode || 'simple';
+  var charts = window.charts || {};
+  var lastDecision = window.lastDecision || null;
 
 // Initialize on DOM ready
 document.addEventListener('DOMContentLoaded', function() {
@@ -59,6 +70,7 @@ function initModeToggle() {
 
 function switchMode(mode) {
   currentMode = mode;
+  window.currentMode = mode; // keep global state updated in case script reloads
   
   // Update button states
   document.querySelectorAll('.mode-btn').forEach(btn => {
@@ -260,9 +272,9 @@ function renderSimpleMode(decision) {
   badge.textContent = status.toUpperCase();
   badge.classList.remove('accept', 'reject', 'escalate');
   
-  if (status === 'accepted') {
+  if (status === 'ACCEPT') {
     badge.classList.add('accept');
-  } else if (status === 'rejected') {
+  } else if (status === 'REJECT') {
     badge.classList.add('reject');
   } else {
     badge.classList.add('escalate');
@@ -391,7 +403,6 @@ function renderExpertCharts(decision) {
 function renderAgentChart(decision) {
   if (charts.agent) charts.agent.destroy();
   
-  const arb = decision.reasoning?.arbitration || {};
   const ctx = document.getElementById('agentChart').getContext('2d');
   
   charts.agent = new Chart(ctx, {
@@ -400,10 +411,10 @@ function renderAgentChart(decision) {
       labels: ['Product Strategy', 'Finance', 'Market Intelligence', 'Competitive Strategy'],
       datasets: [{
         data: [
-          arb.product_component || 0,
-          arb.finance_component || 0,
-          arb.market_component || 0,
-          arb.competitive_component || 0
+          decision.scores.product_strategy || 0,
+          decision.scores.finance || 0,
+          decision.scores.market_intelligence || 0,
+          decision.scores.competitive_strategy || 0
         ],
         backgroundColor: [
           'rgba(59, 130, 246, 0.8)',  // Blue
@@ -597,5 +608,6 @@ function initRawToggle() {
     }
   });
 }
+})();
 
 
