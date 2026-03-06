@@ -140,16 +140,37 @@ class Validator:
         roi = decision_data.get('roi', self.roi_threshold)
         try:
             roi = float(roi)
-            roi_viable = 1.0 if roi >= self.roi_threshold else 0.5
+            # If ROI not provided, calculate from context if available
+            if 'roi' not in decision_data and 'context' in decision_data:
+                context = decision_data['context']
+                investment = float(context.get('investment', 0))
+                expected_returns = float(context.get('expected_returns', 0))
+                if investment > 0:
+                    roi = (expected_returns - investment) / investment
+            roi_viable = 1.0 if self.roi_threshold <= roi <= 10.0 else 0.5  # Reject if ROI > 10 as unrealistic
         except (ValueError, TypeError):
             roi_viable = 0.5
+        
+        # extract market signals from context (if available)
+        context = decision_data.get('context', {}) if isinstance(decision_data, dict) else {}
+        signals = context.get('market_signals', {})
+        demand_idx = float(signals.get('demand_index', 0.0))
+        market_growth = float(signals.get('market_growth', 0.0))
+        competitor_strength = float(signals.get('competitor_strength', 0.0))
+        product_innovation = float(signals.get('product_innovation', 0.0))
+        supply_chain_eff = float(signals.get('supply_chain_efficiency', 0.0))
         
         score = ValidationScore(
             schema_complete=round(schema_complete, 2),
             required_fields_present=round(required_complete, 2),
             numeric_valid=round(numeric_valid, 2),
             confidence=round(confidence, 2),
-            roi_viable=round(roi_viable, 2)
+            roi_viable=round(roi_viable, 2),
+            demand_index=round(min(max(demand_idx, 0.0), 1.0), 2),
+            market_growth=round(min(max(market_growth, 0.0), 1.0), 2),
+            competitor_strength=round(min(max(competitor_strength, 0.0), 1.0), 2),
+            product_innovation=round(min(max(product_innovation, 0.0), 1.0), 2),
+            supply_chain_efficiency=round(min(max(supply_chain_eff, 0.0), 1.0), 2)
         )
         
         return score
@@ -185,9 +206,31 @@ class Validator:
         except (ValueError, TypeError):
             errors.append(f"Invalid confidence value: {confidence}")
         
-        # New validation: agent score variance and risk signals
-        arbitration_score = decision_data.get('arbitration_score', 0.5)
+        # determine whether we're running before or after arbitration
+        arbitration_score = decision_data.get('arbitration_score')
         agent_scores = decision_data.get('agent_scores', {})
+
+        if arbitration_score is None and not agent_scores:
+            # pre-arbitration: only enforce required fields / basic schema
+            enhanced_validation_score = score.weighted_score
+            confidence_score = score.weighted_score
+            score_variance = 0.0
+            risk_signals = 0
+            decision_status = "accepted" if enhanced_validation_score >= self.validation_threshold else "rejected"
+            status = ValidationStatus.PASS if enhanced_validation_score >= self.validation_threshold else ValidationStatus.FAIL
+            logger.info(f"Pre-arbitration validation score: {enhanced_validation_score:.2f}")
+            return ValidationResult(
+                status=status,
+                score=score,
+                errors=errors,
+                warnings=warnings,
+                retry_count=0,
+                decision_status=decision_status
+            )
+
+        # New validation: agent score variance and risk signals
+        if arbitration_score is None:
+            arbitration_score = 0.5
         
         # Calculate agent score variance
         if agent_scores:

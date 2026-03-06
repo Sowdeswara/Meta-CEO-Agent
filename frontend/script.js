@@ -454,19 +454,46 @@ function renderValidationChart(decision) {
   const val = decision.reasoning?.validation?.score || {};
   const ctx = document.getElementById('validationChart').getContext('2d');
   
+  // include extra context-derived metrics if present
+  const extraLabels = [];
+  const extraData = [];
+  if (val.demand_index !== undefined) {
+    extraLabels.push('Demand');
+    extraData.push(val.demand_index);
+  }
+  if (val.market_growth !== undefined) {
+    extraLabels.push('Growth');
+    extraData.push(val.market_growth);
+  }
+  if (val.competitor_strength !== undefined) {
+    extraLabels.push('Competition');
+    extraData.push(val.competitor_strength);
+  }
+  if (val.product_innovation !== undefined) {
+    extraLabels.push('Innovation');
+    extraData.push(val.product_innovation);
+  }
+  if (val.supply_chain_efficiency !== undefined) {
+    extraLabels.push('Supply');
+    extraData.push(val.supply_chain_efficiency);
+  }
+
+  const baseLabels = ['Schema', 'Required Fields', 'Numeric', 'ROI Viable', 'Overall'];
+  const baseData = [
+    val.schema_complete || 0,
+    val.required_fields_present || 0,
+    val.numeric_valid || 0,
+    val.roi_viable || 0,
+    val.weighted_score || 0
+  ];
+
   charts.validation = new Chart(ctx, {
     type: 'radar',
     data: {
-      labels: ['Schema', 'Required Fields', 'Numeric', 'ROI Viable', 'Overall'],
+      labels: baseLabels.concat(extraLabels),
       datasets: [{
         label: 'Validation Metrics',
-        data: [
-          val.schema_complete || 0,
-          val.required_fields_present || 0,
-          val.numeric_valid || 0,
-          val.roi_viable || 0,
-          val.weighted_score || 0
-        ],
+        data: baseData.concat(extraData),
         borderColor: 'rgb(59, 130, 246)',
         backgroundColor: 'rgba(59, 130, 246, 0.2)',
         borderWidth: 2

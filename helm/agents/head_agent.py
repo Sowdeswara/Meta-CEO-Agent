@@ -110,19 +110,14 @@ class HeadAgent:
             self.max_retries
         )
         logger.info(f"Input validation result: {input_validation.status.value} (score: {input_validation.score.weighted_score:.2f})")
+        pre_validation_failed = False
         if not input_validation.passed(self.config.validation_threshold if self.config else 0.70):
-            logger.warning(f"Validation failed for decision {decision_id}")
-            return StructuredDecision(
-                decision_id=decision_id,
-                agent_used=AgentType.HEAD,
-                decision_text="Validation failed. Input does not meet requirements.",
-                confidence=0.0,
-                risk_level="high",
-                roi_estimate=0.0,
-                reasoning={'validation': input_validation.to_dict()},
-                validation_score=input_validation.score.weighted_score,
-                status=DecisionStatus.REJECTED
-            )
+            logger.warning(f"Pre-arbitration validation failed for decision {decision_id}, continuing processing")
+            pre_validation_failed = True
+            # we'll attach the validation info later but do not bail out early
+        
+        # Step 1.5: Market signals are already derived in main.py and available in context['market_signals']
+        logger.info(f"Using market signals: {decision_input.context.get('market_signals', {})}")
         
         # Step 1.5: Market signals are already derived in main.py and available in context['market_signals']
         logger.info(f"Using market signals: {decision_input.context.get('market_signals', {})}")
@@ -133,13 +128,29 @@ class HeadAgent:
         market_dec = None
         finance_dec = None
         if AgentType.PRODUCT_STRATEGY in self.agents:
-            product_dec = self.agents[AgentType.PRODUCT_STRATEGY].process(decision_input)
+            try:
+                product_dec = self.agents[AgentType.PRODUCT_STRATEGY].process(decision_input)
+            except Exception as e:
+                logger.error(f"Agent {AgentType.PRODUCT_STRATEGY.value} failed: {e}")
+                product_dec = self._escalate_decision(decision_id, AgentType.PRODUCT_STRATEGY, str(e))
         if AgentType.COMPETITIVE_STRATEGY in self.agents:
-            competitive_dec = self.agents[AgentType.COMPETITIVE_STRATEGY].process(decision_input)
+            try:
+                competitive_dec = self.agents[AgentType.COMPETITIVE_STRATEGY].process(decision_input)
+            except Exception as e:
+                logger.error(f"Agent {AgentType.COMPETITIVE_STRATEGY.value} failed: {e}")
+                competitive_dec = self._escalate_decision(decision_id, AgentType.COMPETITIVE_STRATEGY, str(e))
         if AgentType.MARKET_INTELLIGENCE in self.agents:
-            market_dec = self.agents[AgentType.MARKET_INTELLIGENCE].process(decision_input)
+            try:
+                market_dec = self.agents[AgentType.MARKET_INTELLIGENCE].process(decision_input)
+            except Exception as e:
+                logger.error(f"Agent {AgentType.MARKET_INTELLIGENCE.value} failed: {e}")
+                market_dec = self._escalate_decision(decision_id, AgentType.MARKET_INTELLIGENCE, str(e))
         if AgentType.FINANCE_OPTIMIZATION in self.agents:
-            finance_dec = self.agents[AgentType.FINANCE_OPTIMIZATION].process(decision_input)
+            try:
+                finance_dec = self.agents[AgentType.FINANCE_OPTIMIZATION].process(decision_input)
+            except Exception as e:
+                logger.error(f"Agent {AgentType.FINANCE_OPTIMIZATION.value} failed: {e}")
+                finance_dec = self._escalate_decision(decision_id, AgentType.FINANCE_OPTIMIZATION, str(e))
 
         # Step 3: Arbitration
         arb_output = self.arbitrator.compute_multi(
@@ -176,6 +187,11 @@ class HeadAgent:
         if decision is None:
             decision = self._default_decision(decision_id, AgentType.HEAD, decision_input)
 
+        # Check if any agent escalated, set overall status to escalated
+        agent_decisions = [product_dec, competitive_dec, market_dec, finance_dec]
+        if any(d and d.status == DecisionStatus.ESCALATED for d in agent_decisions):
+            decision.status = DecisionStatus.ESCALATED
+
         # attach arbitration results
         if isinstance(decision.reasoning, dict):
             decision.reasoning['arbitration'] = arb_output
@@ -185,9 +201,16 @@ class HeadAgent:
             decision.validation_score = validation_result.score.weighted_score
             if isinstance(decision.reasoning, dict):
                 decision.reasoning['validation'] = validation_result.to_dict()
+                if pre_validation_failed:
+                    decision.reasoning['pre_validation'] = input_validation.to_dict()
         except Exception:
             # best-effort assignment; do not fail processing for instrumentation
             logger.debug("Failed to attach validator score to decision object")
+
+        # if pre-validation failed, record rejection but keep computed metrics
+        if pre_validation_failed:
+            decision.status = DecisionStatus.REJECTED
+            # decision_text will be set based on final status
 
         # Step 4: Validate decision output
         output_valid, output_msg = self.validator.validate_output(decision.to_dict())
@@ -195,8 +218,16 @@ class HeadAgent:
         if not output_valid:
             logger.error(f"Output validation failed: {output_msg}")
             decision.status = DecisionStatus.REJECTED
-        else:
+            decision.decision_text = "Output validation failed."
+        elif not pre_validation_failed:
             decision.status = DecisionStatus.ACCEPTED
+            decision.decision_text = "Decision accepted."
+        
+        # Ensure decision_text is set for rejected cases
+        if decision.status == DecisionStatus.REJECTED and not hasattr(decision, 'decision_text') or not decision.decision_text:
+            decision.decision_text = "Validation failed. Input does not meet requirements."
+        elif decision.status == DecisionStatus.ESCALATED:
+            decision.decision_text = "Decision escalated due to agent processing failure."
         
         # Step 5: Store in history
         self.decision_history.append(decision)

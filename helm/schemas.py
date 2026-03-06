@@ -63,23 +63,39 @@ class ValidationScore:
     numeric_valid: float  # 0-1
     confidence: float  # 0-1
     roi_viable: float  # 0-1
+    # additional context-derived signal metrics (0-1)
+    demand_index: float = 0.0
+    market_growth: float = 0.0
+    competitor_strength: float = 0.0
+    product_innovation: float = 0.0
+    supply_chain_efficiency: float = 0.0
     
     @property
     def weighted_score(self) -> float:
-        """Calculate weighted validation score"""
+        """Calculate weighted validation score including market signals"""
         weights = {
-            'schema_complete': 0.20,
-            'required_fields': 0.20,
-            'numeric_valid': 0.20,
-            'confidence': 0.20,
-            'roi_viable': 0.20
+            'schema_complete': 0.15,
+            'required_fields': 0.15,
+            'numeric_valid': 0.15,
+            'confidence': 0.15,
+            'roi_viable': 0.15,
+            'demand_index': 0.05,
+            'market_growth': 0.05,
+            'competitor_strength': 0.05,
+            'product_innovation': 0.05,
+            'supply_chain_efficiency': 0.05
         }
         return (
             self.schema_complete * weights['schema_complete'] +
             self.required_fields_present * weights['required_fields'] +
             self.numeric_valid * weights['numeric_valid'] +
             self.confidence * weights['confidence'] +
-            self.roi_viable * weights['roi_viable']
+            self.roi_viable * weights['roi_viable'] +
+            self.demand_index * weights['demand_index'] +
+            self.market_growth * weights['market_growth'] +
+            self.competitor_strength * weights['competitor_strength'] +
+            self.product_innovation * weights['product_innovation'] +
+            self.supply_chain_efficiency * weights['supply_chain_efficiency']
         )
     
     def to_dict(self) -> Dict[str, float]:
@@ -89,6 +105,11 @@ class ValidationScore:
             'numeric_valid': self.numeric_valid,
             'confidence': self.confidence,
             'roi_viable': self.roi_viable,
+            'demand_index': self.demand_index,
+            'market_growth': self.market_growth,
+            'competitor_strength': self.competitor_strength,
+            'product_innovation': self.product_innovation,
+            'supply_chain_efficiency': self.supply_chain_efficiency,
             'weighted_score': self.weighted_score
         }
 
